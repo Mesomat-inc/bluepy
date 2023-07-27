@@ -1791,7 +1791,7 @@ static gboolean hci_monitor_cb(GIOChannel *chan, GIOCondition cond, gpointer use
 								resp_begin(rsp_SCAN);
 								send_addr(&addr); 
 								send_uint(tag_RSSI, 256 - ev->rssi);
-								send_uint(tag_TYPE, ev->event_type);
+								send_uint(tag_FLAG, ev->event_type);
                                 if (ev->length)
                                     send_data(ev->data, ev->length);
 								resp_end();
@@ -1905,7 +1905,6 @@ static int hci_le_set_extended_scan_enable(int dd, uint8_t enable, uint8_t filte
 static void discover(bool start)
 {
     int err;
-    uint8_t filter_dup = 0x00;  // do not filter duplicates
 
     struct hci_filter nf, of;
     //struct sigaction sa;
@@ -1964,7 +1963,7 @@ static void discover(bool start)
         DBG(" stop pasv scan -----------------------------------");
         setsockopt(hci_dd, SOL_HCI, HCI_FILTER, &of, sizeof(of));
 
-        err = hci_le_set_scan_enable(hci_dd, 0x00, filter_dup, 10000);
+		err = hci_le_set_extended_scan_enable(hci_dd, 0, 0, 0, 0, 0);
         if (err < 0) {
             DBG("Disable scan failed");
             errcode = err_BAD_STATE;

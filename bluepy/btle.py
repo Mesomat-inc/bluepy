@@ -720,6 +720,7 @@ class ScanEntry:
         self.rssi = None
         self.connectable = False
         self.rawData = None
+        self.status = None
         self.scanData = {}
         self.updateCount = 0
 
@@ -730,6 +731,7 @@ class ScanEntry:
         self.addrType = addrType
         self.rssi = -resp['rssi'][0]
         self.connectable = ((resp['flag'][0] & 0x4) == 0)
+        self.status = resp['flag'][0] >> 5
         data = resp.get('d', [''])[0]
         self.rawData = data
 

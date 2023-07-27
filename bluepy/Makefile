@@ -1,7 +1,5 @@
 BLUEZ_PATH=./bluez-5.66
 
-DEBUGGING = 1
-
 BLUEZ_SRCS  = lib/bluetooth.c lib/hci.c lib/sdp.c lib/uuid.c
 BLUEZ_SRCS += attrib/att.c attrib/gatt.c attrib/gattrib.c attrib/utils.c
 BLUEZ_SRCS += btio/btio.c src/log.c src/shared/log.c src/shared/mgmt.c

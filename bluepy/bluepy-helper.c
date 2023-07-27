@@ -1778,16 +1778,90 @@ static gboolean hci_monitor_cb(GIOChannel *chan, GIOCondition cond, gpointer use
     return TRUE;
 }
 
+typedef struct {
+	uint8_t addr_type;
+	uint8_t filt_policy;
+	uint8_t phy;
+	uint8_t type;
+	uint16_t interval;
+	uint16_t window;
+} __attribute((packed)) le_set_extended_scan_parameters_cp;
+
+static int hci_le_set_extended_scan_parameters(int dd, uint8_t addr_type, uint8_t filt_policy, uint8_t phy, uint8_t type, uint16_t interval, uint16_t window, int to)
+{
+	struct hci_request rq;
+	le_set_extended_scan_parameters_cp ext_scan_cp;
+	uint8_t status; 
+
+	memset(&ext_scan_cp, 0x00, sizeof(ext_scan_cp));
+	ext_scan_cp.addr_type = type;
+	ext_scan_cp.filt_policy = filt_policy;
+	ext_scan_cp.phy = phy;
+	ext_scan_cp.type = type;
+	ext_scan_cp.interval = interval;
+	ext_scan_cp.window = window;
+
+	memset(&rq, 0, sizeof(rq));
+	rq.ogf = OGF_LE_CTL;
+	rq.ocf = 0x0041;
+	rq.cparam = &ext_scan_cp;
+	rq.clen = sizeof(ext_scan_cp);
+	rq.rparam = &status;
+	rq.rlen = 1;
+
+	if (hci_send_req(dd, &rq, to) < 0)
+		return -1;
+
+	if (status) {
+		errno = EIO;
+		return -status;
+	}
+
+	return 0;
+}
+
+typedef struct {
+	uint8_t enabled;
+	uint8_t filter_dup;
+	uint16_t duration;
+	uint16_t period;
+} __attribute__((packed)) le_set_extended_scan_enable_cp;
+
+static int hci_le_set_extended_scan_enable(int dd, uint8_t enable, uint8_t filter_dup, uint16_t duration, uint16_t period, int to) 
+{
+	struct hci_request rq;
+	le_set_extended_scan_enable_cp ext_scan_cp;
+	uint8_t status; 
+
+	memset(&ext_scan_cp, 0x00, sizeof(ext_scan_cp));
+	ext_scan_cp.enabled = enable;
+	ext_scan_cp.filter_dup = filter_dup;
+	ext_scan_cp.duration = duration;
+	ext_scan_cp.period = period;
+
+	memset(&rq, 0, sizeof(rq));
+	rq.ogf = OGF_LE_CTL;
+	rq.ocf = 0x0042;
+	rq.cparam = &ext_scan_cp;
+	rq.clen = sizeof(ext_scan_cp);
+	rq.rparam = &status;
+	rq.rlen = 1;
+
+	if (hci_send_req(dd, &rq, to) < 0)
+		return -1;
+
+	if (status) {
+		errno = EIO;
+		return -status;
+	}
+
+	return 0;
+}
 
 // perform a passive scan, i.e. report ADV_IND packets but do not request SCN_RSP packets
 static void discover(bool start)
 {
     int err;
-    uint8_t own_type = LE_PUBLIC_ADDRESS;
-    uint8_t scan_type = 0x00;  // passive
-    uint8_t filter_policy = 0x00;
-    uint16_t interval = htobs(0x0010);
-    uint16_t window = htobs(0x0010);
     uint8_t filter_dup = 0x00;  // do not filter duplicates
 
     struct hci_filter nf, of;
@@ -1797,14 +1871,13 @@ static void discover(bool start)
     hci_dd = hci_open_dev(mgmt_ind);
     DBG("hcidev handle is 0x%x, mgmt_ind is %d", hci_dd, mgmt_ind);
     if (start) {
-        err = hci_le_set_scan_enable(hci_dd, 0x00, filter_dup, 10000);
-        err = hci_le_set_scan_parameters(hci_dd, scan_type, interval, window,
-                                             own_type, filter_policy, 10000);
-        if (err < 0) {
-            DBG("Set scan parameters failed");
-            resp_mgmt(err_BAD_STATE);
-            return;
-        }
+
+		err = hci_le_set_extended_scan_enable(hci_dd, 0, 0, 0, 0, 0);
+		err = hci_le_set_extended_scan_parameters(hci_dd, 1, 0, 1, 1, 0x0012, 0x0012, 0);
+		if (err < 0) {
+			DBG("Failed to set extended scan parameters. 0x%02x", -err);
+		}
+
         hci_io = g_io_channel_unix_new(hci_dd);
         g_io_channel_set_encoding(hci_io, NULL, NULL);
         g_io_channel_set_close_on_unref(hci_io, TRUE);
@@ -1832,13 +1905,12 @@ static void discover(bool start)
         }
 
         DBG("LE Scan ...");
-        err = hci_le_set_scan_enable(hci_dd, 0x01, filter_dup, 10000);
-        if (err < 0) {
-            //andy: signal error
-            DBG("Enable scan failed");
-            resp_mgmt(err_BAD_STATE);
-            return;
-        }
+
+
+		err = hci_le_set_extended_scan_enable(hci_dd, 1, 0, 0, 0, 0);
+		if (err < 0) {
+			DBG("Failed to enable extended scan. 0x%02x", -err);
+		}
 
         resp_mgmt(err_SUCCESS);
         set_state(STATE_SCANNING);

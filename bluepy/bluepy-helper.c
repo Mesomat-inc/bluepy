@@ -1654,6 +1654,25 @@ static void cmd_scan(int argcp, char **argvp)
 #include "hci.h"
 #include "hci_lib.h"
 
+#define EVT_LE_EXTENDED_ADVERTISING_REPORT	0x0d
+typedef struct {
+	uint8_t 	n_reports; // assume always 1
+	uint16_t 	event_type;
+	uint8_t		addr_type;
+	bdaddr_t	addr;
+	uint8_t		primary_phy;
+	uint8_t 	secondary_phy;
+	uint8_t 	advertising_sid;
+	uint8_t 	tx_power;
+	int8_t 		rssi; 
+	uint16_t 	interval;
+	uint8_t 	direct_addr_type;
+	bdaddr_t 	direct_addr;
+	uint8_t 	length;
+	uint8_t 	data[];
+} __attribute__ ((packed)) le_extended_advertising_info;
+#define LE_EXTENDED_ADVERTISING_INFO_SIZE 9
+
 static gboolean hci_monitor_cb(GIOChannel *chan, GIOCondition cond, gpointer user_data)
 {
     unsigned char buf[HCI_MAX_FRAME_SIZE], *ptr;
@@ -1756,8 +1775,32 @@ static gboolean hci_monitor_cb(GIOChannel *chan, GIOCondition cond, gpointer use
                         }
                         break;
 
+						case EVT_LE_EXTENDED_ADVERTISING_REPORT: {
+							le_extended_advertising_info *ev = (le_extended_advertising_info *) (meta->data);
+							
+							if (conn_state == STATE_SCANNING) {
+
+								struct mgmt_addr_info addr;
+								switch (ev->addr_type) {
+									case LE_PUBLIC_ADDRESS: addr.type= BDADDR_LE_PUBLIC; break;
+									case LE_RANDOM_ADDRESS: addr.type= BDADDR_LE_RANDOM; break;
+									default: addr.type= 0;
+								}
+								addr.bdaddr= ev->addr;
+
+								resp_begin(rsp_SCAN);
+								send_addr(&addr); 
+								send_uint(tag_RSSI, 256 - ev->rssi);
+								send_uint(tag_TYPE, ev->event_type);
+                                if (ev->length)
+                                    send_data(ev->data, ev->length);
+								resp_end();
+							}
+						}
+						break;
+
                         default:
-                            DBG("Ignoring EVT_LE_ADVERTISING_REPORT subevent %02x", meta->subevent);
+                            DBG("Ignoring EVT_LE_META_EVENT subevent %02x", meta->subevent);
                             return TRUE;
                     } // switch (meta->subevent)
 

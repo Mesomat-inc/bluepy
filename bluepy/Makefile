@@ -1,8 +1,8 @@
-BLUEZ_PATH=./bluez-5.47
+BLUEZ_PATH=./bluez-5.66
 
 BLUEZ_SRCS  = lib/bluetooth.c lib/hci.c lib/sdp.c lib/uuid.c
 BLUEZ_SRCS += attrib/att.c attrib/gatt.c attrib/gattrib.c attrib/utils.c
-BLUEZ_SRCS += btio/btio.c src/log.c src/shared/mgmt.c
+BLUEZ_SRCS += btio/btio.c src/log.c src/shared/log.c src/shared/mgmt.c
 BLUEZ_SRCS += src/shared/crypto.c src/shared/att.c src/shared/queue.c src/shared/util.c
 BLUEZ_SRCS += src/shared/io-glib.c src/shared/timeout-glib.c
 

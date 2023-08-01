@@ -815,12 +815,14 @@ class Scanner(BluepyHelper):
         self.scanned = {}
         self.iface=iface
         self.passive=False
+        self.extended=False
 
     def _cmd(self):
-        return "pasv" if self.passive else "scan"
+        return "pasv" if self.passive else ("extd" if self.extended else "scan")
 
-    def start(self, passive=False):
+    def start(self, passive=False, extended=False):
         self.passive = passive
+        self.extended = True if (not passive and extended) else False
         self._startHelper(iface=self.iface)
         self._mgmtCmd("le on")
         self._writeCmd(self._cmd()+"\n")
@@ -882,9 +884,9 @@ class Scanner(BluepyHelper):
     def getDevices(self):
         return self.scanned.values()
 
-    def scan(self, timeout=10, passive=False):
+    def scan(self, timeout=10, passive=False, extended=False):
         self.clear()
-        self.start(passive=passive)
+        self.start(passive=passive, extended=extended)
         self.process(timeout)
         self.stop()
         return self.getDevices()

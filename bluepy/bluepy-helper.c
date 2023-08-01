@@ -46,6 +46,8 @@
 #include "gatttool.h"
 #include "version.h"
 
+#include "hci_ext.h"
+
 #define IO_CAPABILITY_NOINPUTNOOUTPUT   0x03
 
 #ifdef BLUEPY_DEBUG
@@ -1654,24 +1656,6 @@ static void cmd_scan(int argcp, char **argvp)
 #include "hci.h"
 #include "hci_lib.h"
 
-#define EVT_LE_EXTENDED_ADVERTISING_REPORT	0x0d
-typedef struct {
-	uint8_t 	n_reports; // assume always 1
-	uint16_t 	event_type;
-	uint8_t		addr_type;
-	bdaddr_t	addr;
-	uint8_t		primary_phy;
-	uint8_t 	secondary_phy;
-	uint8_t 	advertising_sid;
-	uint8_t 	tx_power;
-	int8_t 		rssi; 
-	uint16_t 	interval;
-	uint8_t 	direct_addr_type;
-	bdaddr_t 	direct_addr;
-	uint8_t 	length;
-	uint8_t 	data[];
-} __attribute__ ((packed)) le_extended_advertising_info;
-#define LE_EXTENDED_ADVERTISING_INFO_SIZE 9
 
 static gboolean hci_monitor_cb(GIOChannel *chan, GIOCondition cond, gpointer user_data)
 {
@@ -1821,88 +1805,109 @@ static gboolean hci_monitor_cb(GIOChannel *chan, GIOCondition cond, gpointer use
     return TRUE;
 }
 
-typedef struct {
-	uint8_t addr_type;
-	uint8_t filt_policy;
-	uint8_t phy;
-	uint8_t type;
-	uint16_t interval;
-	uint16_t window;
-} __attribute((packed)) le_set_extended_scan_parameters_cp;
-
-static int hci_le_set_extended_scan_parameters(int dd, uint8_t addr_type, uint8_t filt_policy, uint8_t phy, uint8_t type, uint16_t interval, uint16_t window, int to)
-{
-	struct hci_request rq;
-	le_set_extended_scan_parameters_cp ext_scan_cp;
-	uint8_t status; 
-
-	memset(&ext_scan_cp, 0x00, sizeof(ext_scan_cp));
-	ext_scan_cp.addr_type = type;
-	ext_scan_cp.filt_policy = filt_policy;
-	ext_scan_cp.phy = phy;
-	ext_scan_cp.type = type;
-	ext_scan_cp.interval = interval;
-	ext_scan_cp.window = window;
-
-	memset(&rq, 0, sizeof(rq));
-	rq.ogf = OGF_LE_CTL;
-	rq.ocf = 0x0041;
-	rq.cparam = &ext_scan_cp;
-	rq.clen = sizeof(ext_scan_cp);
-	rq.rparam = &status;
-	rq.rlen = 1;
-
-	if (hci_send_req(dd, &rq, to) < 0)
-		return -1;
-
-	if (status) {
-		errno = EIO;
-		return -status;
-	}
-
-	return 0;
-}
-
-typedef struct {
-	uint8_t enabled;
-	uint8_t filter_dup;
-	uint16_t duration;
-	uint16_t period;
-} __attribute__((packed)) le_set_extended_scan_enable_cp;
-
-static int hci_le_set_extended_scan_enable(int dd, uint8_t enable, uint8_t filter_dup, uint16_t duration, uint16_t period, int to) 
-{
-	struct hci_request rq;
-	le_set_extended_scan_enable_cp ext_scan_cp;
-	uint8_t status; 
-
-	memset(&ext_scan_cp, 0x00, sizeof(ext_scan_cp));
-	ext_scan_cp.enabled = enable;
-	ext_scan_cp.filter_dup = filter_dup;
-	ext_scan_cp.duration = duration;
-	ext_scan_cp.period = period;
-
-	memset(&rq, 0, sizeof(rq));
-	rq.ogf = OGF_LE_CTL;
-	rq.ocf = 0x0042;
-	rq.cparam = &ext_scan_cp;
-	rq.clen = sizeof(ext_scan_cp);
-	rq.rparam = &status;
-	rq.rlen = 1;
-
-	if (hci_send_req(dd, &rq, to) < 0)
-		return -1;
-
-	if (status) {
-		errno = EIO;
-		return -status;
-	}
-
-	return 0;
-}
-
 // perform a passive scan, i.e. report ADV_IND packets but do not request SCN_RSP packets
 static void discover(bool start)
+{
+    int err;
+    uint8_t own_type = LE_PUBLIC_ADDRESS;
+    uint8_t scan_type = 0x00;  // passive
+    uint8_t filter_policy = 0x00;
+    uint16_t interval = htobs(0x0010);
+    uint16_t window = htobs(0x0010);
+    uint8_t filter_dup = 0x00;  // do not filter duplicates
+
+    struct hci_filter nf, of;
+    //struct sigaction sa;
+    socklen_t olen;
+
+    hci_dd = hci_open_dev(mgmt_ind);
+    DBG("hcidev handle is 0x%x, mgmt_ind is %d", hci_dd, mgmt_ind);
+    if (start) {
+        err = hci_le_set_scan_enable(hci_dd, 0x00, filter_dup, 10000);
+        err = hci_le_set_scan_parameters(hci_dd, scan_type, interval, window,
+                                             own_type, filter_policy, 10000);
+        if (err < 0) {
+            DBG("Set scan parameters failed");
+            resp_mgmt(err_BAD_STATE);
+            return;
+        }
+        hci_io = g_io_channel_unix_new(hci_dd);
+        g_io_channel_set_encoding(hci_io, NULL, NULL);
+        g_io_channel_set_close_on_unref(hci_io, TRUE);
+        g_io_add_watch(hci_io, G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL, hci_monitor_cb, NULL);
+        g_io_channel_unref(hci_io);
+
+        // setup filter
+        olen = sizeof(of);
+        if (getsockopt(hci_dd, SOL_HCI, HCI_FILTER, &of, &olen) < 0) {
+            printf("Could not get socket options\n");
+            resp_mgmt(err_BAD_STATE);
+            return;
+        }
+        hci_filter_clear(&nf);
+        hci_filter_set_ptype(HCI_EVENT_PKT, &nf);
+        hci_filter_set_event(EVT_LE_META_EVENT, &nf);
+        hci_filter_set_event(EVT_CMD_COMPLETE, &nf);
+        hci_filter_set_ptype(HCI_COMMAND_PKT, &nf);
+        hci_filter_set_event(OCF_LE_SET_SCAN_ENABLE, &nf);
+
+        if (setsockopt(hci_dd, SOL_HCI, HCI_FILTER, &nf, sizeof(nf)) < 0) {
+            printf("Could not set socket options\n");
+            resp_mgmt(err_BAD_STATE);
+            return;
+        }
+
+        DBG("LE Scan ...");
+        err = hci_le_set_scan_enable(hci_dd, 0x01, filter_dup, 10000);
+        if (err < 0) {
+            //andy: signal error
+            DBG("Enable scan failed");
+            resp_mgmt(err_BAD_STATE);
+            return;
+        }
+
+        resp_mgmt(err_SUCCESS);
+        set_state(STATE_SCANNING);
+    } else {
+        const char* errcode = err_SUCCESS;
+
+        // set filter to receive no events
+        DBG(" stop pasv scan -----------------------------------");
+        setsockopt(hci_dd, SOL_HCI, HCI_FILTER, &of, sizeof(of));
+
+        err = hci_le_set_scan_enable(hci_dd, 0x00, filter_dup, 10000);
+        if (err < 0) {
+            DBG("Disable scan failed");
+            errcode = err_BAD_STATE;
+        }
+        hci_close_dev(hci_dd);
+        hci_dd= -1;
+        hci_io= NULL;
+        resp_mgmt(errcode);
+        set_state(STATE_DISCONNECTED);
+    }
+}
+
+static void cmd_pasvend(int argcp, char **argvp)
+{
+    if (1 < argcp) {
+        resp_mgmt(err_BAD_PARAM);
+    } else {
+        discover(FALSE);
+    }
+}
+
+static void cmd_pasv(int argcp, char **argvp)
+{
+    if (1 < argcp) {
+        resp_mgmt(err_BAD_PARAM);
+    } else {
+        discover(TRUE);
+    }
+}
+
+// perform an extended scan, i.e. parse AUX_ADV_IND and AUX_CHAINED_IND packets
+static void discover_extended(bool start)
 {
     int err;
 
@@ -1976,23 +1981,24 @@ static void discover(bool start)
     }
 }
 
-static void cmd_pasvend(int argcp, char **argvp)
+static void cmd_extdend(int argcp, char **argvp)
 {
     if (1 < argcp) {
         resp_mgmt(err_BAD_PARAM);
     } else {
-        discover(FALSE);
+        discover_extended(FALSE);
     }
 }
 
-static void cmd_pasv(int argcp, char **argvp)
+static void cmd_extd(int argcp, char **argvp)
 {
     if (1 < argcp) {
         resp_mgmt(err_BAD_PARAM);
     } else {
-        discover(TRUE);
+        discover_extended(TRUE);
     }
 }
+
 
 static struct {
     const char *cmd;
@@ -2050,6 +2056,10 @@ static struct {
         "Start passive scan" },
     { "pasvend",    cmd_pasvend,  "",
         "Force passive scan end" },
+	{ "extd",       cmd_extd, "",
+		"Start extended scan"},
+	{ "extdend", 	cmd_extdend, "",
+		"Force extended scan end" },
     { NULL, NULL, NULL}
 };
 

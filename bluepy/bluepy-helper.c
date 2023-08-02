@@ -1774,7 +1774,7 @@ static gboolean hci_monitor_cb(GIOChannel *chan, GIOCondition cond, gpointer use
 
 								resp_begin(rsp_SCAN);
 								send_addr(&addr); 
-								send_uint(tag_RSSI, 256 - ev->rssi);
+								send_uint(tag_RSSI, -ev->rssi);
 								send_uint(tag_FLAG, ev->event_type);
                                 if (ev->length)
                                     send_data(ev->data, ev->length);

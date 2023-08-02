@@ -626,7 +626,7 @@ class Peripheral(BluepyHelper):
             cmd += " hci"+str(iface)
         resp = self._getResp('oob')
         if resp is not None:
-            data = resp.get('d', [''])[0]
+            data = resp.get('d', [b''])[0]
             if data is None:
                 raise BTLEManagementError(
                                 "Failed to get local OOB data.")
@@ -713,8 +713,9 @@ class ScanEntry:
         MANUFACTURER              : 'Manufacturer',
     }
 
-    def __init__(self, addr, iface):
+    def __init__(self, addr, rawAddr, iface):
         self.addr = addr
+        self.rawAddr = rawAddr
         self.iface = iface
         self.addrType = None
         self.rssi = None
@@ -732,7 +733,7 @@ class ScanEntry:
         self.rssi = -resp['rssi'][0]
         self.connectable = ((resp['flag'][0] & 0x4) == 0)
         self.status = resp['flag'][0] >> 5
-        data = resp.get('d', [''])[0]
+        data = resp.get('d', [b''])[0]
         self.rawData = data
 
         # Note: bluez is notifying devices twice: once with advertisement data,
@@ -868,11 +869,12 @@ class Scanner(BluepyHelper):
             elif respType == 'scan':
                 # device found
                 addr = binascii.b2a_hex(resp['addr'][0]).decode('utf-8')
+                rawAddr = resp['addr'][0]
                 addr = ':'.join([addr[i:i+2] for i in range(0,12,2)])
                 if addr in self.scanned:
                     dev = self.scanned[addr]
                 else:
-                    dev = ScanEntry(addr, self.iface)
+                    dev = ScanEntry(addr, rawAddr, self.iface)
                     self.scanned[addr] = dev
                 isNewData = dev._update(resp)
                 if self.delegate is not None:
@@ -886,9 +888,14 @@ class Scanner(BluepyHelper):
 
     def scan(self, timeout=10, passive=False, extended=False):
         self.clear()
-        self.start(passive=passive, extended=extended)
-        self.process(timeout)
-        self.stop()
+        self.start(passive=passive)
+        try: 
+            self.process(timeout)
+        except Exception as e:
+            raise e
+        finally:
+            self.stop()
+
         return self.getDevices()
 
 

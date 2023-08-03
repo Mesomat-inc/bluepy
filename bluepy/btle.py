@@ -727,8 +727,6 @@ class ScanEntry:
 
     def _update(self, resp):
         addrType = self.addrTypes.get(resp['type'][0], None)
-        if (self.addrType is not None) and (addrType != self.addrType):
-            raise BTLEInternalError("Address type changed during scan, for address %s" % self.addr)
         self.addrType = addrType
         self.rssi = -resp['rssi'][0]
         self.connectable = ((resp['flag'][0] & 0x4) == 0)

@@ -888,7 +888,7 @@ class Scanner(BluepyHelper):
 
     def scan(self, timeout=10, passive=False, extended=False):
         self.clear()
-        self.start(passive=passive)
+        self.start(passive=passive, extended=extended)
         try: 
             self.process(timeout)
         except Exception as e:

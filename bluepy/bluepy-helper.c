@@ -2004,7 +2004,9 @@ static void cmd_clearwl(int argcp, char **argvp) {
 	if (argcp > 1) {
 		resp_mgmt(err_BAD_PARAM);
 	} else {
-    	hci_dd = hci_open_dev(mgmt_ind);
+		if (hci_dd < 0) {
+    		hci_dd = hci_open_dev(mgmt_ind);
+		}
 		int result = hci_le_clear_white_list(hci_dd, 0);
 		if (result == 0) {
 			resp_mgmt(err_SUCCESS);
@@ -2019,7 +2021,9 @@ static void cmd_addwl(int argcp, char **argvp) {
 	if (argcp > 2) {
 		resp_mgmt(err_BAD_PARAM);
 	} else {
-		hci_dd = hci_open_dev(mgmt_ind);
+		if (hci_dd < 0) {
+			hci_dd = hci_open_dev(mgmt_ind);
+		}
 		bdaddr_t bdaddr;
 		str2ba(argvp[1], &bdaddr);	
 		int result = hci_le_add_white_list(hci_dd, &bdaddr, 0, 0);

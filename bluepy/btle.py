@@ -13,6 +13,7 @@ import struct
 import signal
 from queue import Queue, Empty
 from threading import Thread
+import re
 
 def preexec_function():
     # Ignore the SIGINT signal by setting the handler to the standard
@@ -35,6 +36,9 @@ def DBG(*args):
         msg = " ".join([str(a) for a in args])
         print(msg)
 
+def is_ble_addr(addr):
+    pattern = "^(([0-9]{2}|[a-f]{2}|[0-9][a-f]|[a-f][0-9])\:){5}([0-9]{2}|[a-f]{2}|[0-9][a-f]|[a-f]|[0-9])$"
+    return re.search(pattern, addr, re.IGNORECASE) is not None
 
 class BTLEException(Exception):
     """Base class for all Bluepy exceptions"""
@@ -819,21 +823,34 @@ class Scanner(BluepyHelper):
     def _cmd(self):
         return "pasv" if self.passive else ("extd" if self.extended else "scan")
 
-    def start(self, passive=False, extended=False):
+    def start(self, passive=False, extended=False, whitelist=[]):
         self.passive = passive
         self.extended = True if (not passive and extended) else False
         self._startHelper(iface=self.iface)
         self._mgmtCmd("le on")
+
+        # configure whitelist 
+        self._writeCmd("clearwl\n")
+        rsp = self._waitResp("mgmt")
+        for addr in whitelist:
+            if is_ble_addr(addr):
+                self._writeCmd(f"addwl {addr}\n")
+                rsp = self._waitResp("mgmt")
+
+
         self._writeCmd(self._cmd()+"\n")
         rsp = self._waitResp("mgmt")
-        if rsp["code"][0] == "success":
+        
+        if rsp['code'][0] == 'success':
             return
+
         # Sometimes previous scan still ongoing
         if rsp["code"][0] == "busy":
             self._mgmtCmd(self._cmd()+"end")
             rsp = self._waitResp("stat")
             assert rsp["state"][0] == "disc"
             self._mgmtCmd(self._cmd())
+
 
     def stop(self):
         self._mgmtCmd(self._cmd()+"end")
@@ -884,9 +901,9 @@ class Scanner(BluepyHelper):
     def getDevices(self):
         return self.scanned.values()
 
-    def scan(self, timeout=10, passive=False, extended=False):
+    def scan(self, timeout=10, passive=False, extended=False, whitelist=[]):
         self.clear()
-        self.start(passive=passive, extended=extended)
+        self.start(passive=passive, extended=extended, whitelist=whitelist)
         try: 
             self.process(timeout)
         except Exception as e:

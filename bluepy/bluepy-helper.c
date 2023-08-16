@@ -1920,10 +1920,11 @@ static void discover_extended(bool start)
     if (start) {
 
 		err = hci_le_set_extended_scan_enable(hci_dd, 0, 0, 0, 0, 0);
-		err = hci_le_set_extended_scan_parameters(hci_dd, 1, 0, 1, 1, 0x0012, 0x0012, 0);
+		err = hci_le_set_extended_scan_parameters(hci_dd, 1, 1, 1, 1, 0x0012, 0x0012, 0);
 		if (err < 0) {
 			DBG("Failed to set extended scan parameters. 0x%02x", -err);
 		}
+
 
         hci_io = g_io_channel_unix_new(hci_dd);
         g_io_channel_set_encoding(hci_io, NULL, NULL);
@@ -1999,6 +2000,38 @@ static void cmd_extd(int argcp, char **argvp)
     }
 }
 
+static void cmd_clearwl(int argcp, char **argvp) {
+	if (argcp > 1) {
+		resp_mgmt(err_BAD_PARAM);
+	} else {
+    	hci_dd = hci_open_dev(mgmt_ind);
+		int result = hci_le_clear_white_list(hci_dd, 0);
+		if (result == 0) {
+			resp_mgmt(err_SUCCESS);
+		} else {
+			resp_mgmt(err_BAD_CMD);
+			DBG("errno = %d", result);
+		}
+	}
+}
+
+static void cmd_addwl(int argcp, char **argvp) {
+	if (argcp > 2) {
+		resp_mgmt(err_BAD_PARAM);
+	} else {
+		hci_dd = hci_open_dev(mgmt_ind);
+		bdaddr_t bdaddr;
+		str2ba(argvp[1], &bdaddr);	
+		int result = hci_le_add_white_list(hci_dd, &bdaddr, 0, 0);
+		if (result == 0) {
+			resp_mgmt(err_SUCCESS);
+		} else {
+			resp_mgmt(err_BAD_CMD);
+			DBG("errno = %d", result);
+		}
+	}
+}
+
 
 static struct {
     const char *cmd;
@@ -2060,6 +2093,10 @@ static struct {
 		"Start extended scan"},
 	{ "extdend", 	cmd_extdend, "",
 		"Force extended scan end" },
+	{ "clearwl", cmd_clearwl, "",
+		"Clear whitelist"},
+	{ "addwl", cmd_addwl, "[addr]",
+		"Add a device to the while list"},
     { NULL, NULL, NULL}
 };
 

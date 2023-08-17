@@ -819,19 +819,21 @@ class Scanner(BluepyHelper):
     def _cmd(self):
         return "pasv" if self.passive else ("extd" if self.extended else "scan")
 
-    def start(self, passive=False, extended=False, whitelist=[]):
+    def setWhitelist(self, whitelist):
+        self._startHelper(iface=self.iface)
+        self._mgmtCmd("le on")
+        self._writeCmd("clearwl\n")
+        rsp = self._waitResp("mgmt")
+        for addr in whitelist:
+            print(addr)
+            self._writeCmd(f"addwl {addr}\n")
+            rsp = self._waitResp("mgmt")
+
+    def start(self, passive=False, extended=False):
         self.passive = passive
         self.extended = True if (not passive and extended) else False
         self._startHelper(iface=self.iface)
         self._mgmtCmd("le on")
-
-        # configure whitelist 
-        self._writeCmd("clearwl\n")
-        rsp = self._waitResp("mgmt")
-        for addr in whitelist:
-            self._writeCmd(f"addwl {addr}\n")
-            rsp = self._waitResp("mgmt")
-
 
         self._writeCmd(self._cmd()+"\n")
         rsp = self._waitResp("mgmt")
@@ -845,7 +847,6 @@ class Scanner(BluepyHelper):
             rsp = self._waitResp("stat")
             assert rsp["state"][0] == "disc"
             self._mgmtCmd(self._cmd())
-
 
     def stop(self):
         self._mgmtCmd(self._cmd()+"end")
@@ -896,9 +897,9 @@ class Scanner(BluepyHelper):
     def getDevices(self):
         return self.scanned.values()
 
-    def scan(self, timeout=10, passive=False, extended=False, whitelist=[]):
+    def scan(self, timeout=10, passive=False, extended=False):
         self.clear()
-        self.start(passive=passive, extended=extended, whitelist=whitelist)
+        self.start(passive=passive, extended=extended)
         try: 
             self.process(timeout)
         except Exception as e:

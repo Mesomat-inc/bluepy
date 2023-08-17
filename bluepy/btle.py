@@ -36,10 +36,6 @@ def DBG(*args):
         msg = " ".join([str(a) for a in args])
         print(msg)
 
-def is_ble_addr(addr):
-    pattern = "^(([0-9]{2}|[a-f]{2}|[0-9][a-f]|[a-f][0-9])\:){5}([0-9]{2}|[a-f]{2}|[0-9][a-f]|[a-f]|[0-9])$"
-    return re.search(pattern, addr, re.IGNORECASE) is not None
-
 class BTLEException(Exception):
     """Base class for all Bluepy exceptions"""
     def __init__(self, message, resp_dict=None):
@@ -833,9 +829,8 @@ class Scanner(BluepyHelper):
         self._writeCmd("clearwl\n")
         rsp = self._waitResp("mgmt")
         for addr in whitelist:
-            if is_ble_addr(addr):
-                self._writeCmd(f"addwl {addr}\n")
-                rsp = self._waitResp("mgmt")
+            self._writeCmd(f"addwl {addr}\n")
+            rsp = self._waitResp("mgmt")
 
 
         self._writeCmd(self._cmd()+"\n")

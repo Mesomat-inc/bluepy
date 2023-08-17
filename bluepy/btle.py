@@ -825,7 +825,6 @@ class Scanner(BluepyHelper):
         self._writeCmd("clearwl\n")
         rsp = self._waitResp("mgmt")
         for addr in whitelist:
-            print(addr)
             self._writeCmd(f"addwl {addr}\n")
             rsp = self._waitResp("mgmt")
 
